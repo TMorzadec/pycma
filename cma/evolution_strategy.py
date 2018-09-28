@@ -194,7 +194,7 @@ from numpy import inf, array
 # logger = logging.getLogger(__name__)  # should not be done during import
 # logger.info('message')  # prints INFO:cma...:message on red background
 # see https://fangpenlin.com/posts/2012/08/26/good-logging-practice-in-python/
-
+from . import ask_and_eval_parallelized
 from . import interfaces
 from . import transformations
 from . import optimization_tools as ot
@@ -2104,8 +2104,22 @@ class CMAEvolutionStrategy(interfaces.OOOptimizer):
     # ____________________________________________________________
     # ____________________________________________________________
     #
+    
+    
     def ask_and_eval(self, func, args=(), gradf=None, number=None, xmean=None, sigma_fac=1,
                      evaluations=1, aggregation=np.median, kappa=1):
+        
+        try:
+             cpu = self.cpu
+             
+        except Exception as exception:
+            
+            cpu = 0
+        
+        if cpu > 1:
+            
+            return ask_and_eval_parallelized.ask_and_eval_parallelized(self, func = func, args = args, gradf = gradf, number = number, xmean = xmean, sigma_fac = sigma_fac, evaluations = evaluations, aggregation = aggregation, kappa = kappa, number_of_processes = cpu)
+            
         """sample `number` solutions and evaluate them on `func`.
 
         Each solution ``s`` is resampled until

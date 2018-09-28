@@ -6,6 +6,7 @@ from .utilities.utils import BlancClass as _BlancClass
 from .utilities.math import Mh
 # from .transformations import BoundTransform  # only to make it visible but gives circular import anyways
 from .utilities.python3for2 import range
+from . import reeval_parallelized
 del absolute_import, division, print_function  #, unicode_literals
 
 class BestSolution(object):
@@ -181,7 +182,7 @@ class NoiseHandler(object):
     # while all other variance changing sources are removed (because they are intrinsically biased). Then
     # using kappa to get convergence (with unit sphere samples): noiseS=0 leads to a certain kappa increasing rate?
     def __init__(self, N, maxevals=[1, 1, 1], aggregate=np.median,
-                 reevals=None, epsilon=1e-7, parallel=False):
+                 reevals=None, epsilon=1e-7, parallel = False):
         """Parameters are:
 
         ``N``
@@ -248,6 +249,8 @@ class NoiseHandler(object):
         self.noiseS = 0
 
     def __call__(self, X, fit, func, ask=None, args=()):
+        
+        
         """proceed with noise measurement, set anew attributes ``evaluations``
         (proposed number of evaluations to "treat" noise) and ``evaluations_just_done``
         and return a factor for increasing sigma.
@@ -275,10 +278,13 @@ class NoiseHandler(object):
         `treat`.
 
         """
+        
         self.evaluations_just_done = 0
         if not self.maxevals or self.lam_reeval == 0:
             return 1.0
+        
         res = self.reeval(X, fit, func, ask, args)
+        
         if not len(res):
             return 1.0
         self.update_measure()
@@ -296,7 +302,20 @@ class NoiseHandler(object):
             self.evaluations = max((self.evaluations * self.alphaevalsdown, self.minevals))
             return 1.0  # / self.alphasigma
 
-    def reeval(self, X, fit, func, ask, args=()):
+    def reeval(self, X, fit, func, ask, args = ()):
+        
+        try:
+            
+            cpu = self.cpu
+              
+        except Exception as exception:
+            cpu = 0
+            
+            
+        if cpu > 1:
+            return reeval_parallelized.reeval_parallelized(self, X = X, fit = fit, func = func, ask = ask, args = args, cpu = cpu)
+        
+        
         """store two fitness lists, `fit` and ``fitre`` reevaluating some
         solutions in `X`.
         ``self.evaluations`` evaluations are done for each reevaluated
@@ -351,6 +370,8 @@ class NoiseHandler(object):
         return self.noiseS, s
 
     def indices(self, fit):
+        
+        
         """return the set of indices to be reevaluated for noise
         measurement.
 
@@ -368,6 +389,8 @@ class NoiseHandler(object):
             # take n_first first and reev - n_first best of the remaining
             n_first = lam_reev - lam_reev // 2
             sort_idx = np.argsort(np.array(fit, copy=False)[n_first:]) + n_first
+            
+            
             return np.array(list(range(0, n_first)) +
                             list(sort_idx[0:lam_reev - n_first]), copy=False)
         elif choice == 2:
