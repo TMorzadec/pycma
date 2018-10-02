@@ -6,42 +6,7 @@ In this file I suggest a parallelization of reeval and 'fagg' too.
 import psutil
 import multiprocessing
 from multiprocessing import cpu_count, Process, Queue
-
-def kill_proc_tree(pid, include_parent = True, timeout = None, on_terminate=None):
-
-    """Kill a process tree (including grandchildren).
-    "on_terminate", if specified, is a callabck function which is
-    called as soon as a child terminates.
-    """
-
-    parent = psutil.Process(pid)
-    children = parent.children(recursive=True)
-
-    if include_parent:
-        children.append(parent)
-
-    for p in children:
-
-        p.terminate()
-        gone, alive = psutil.wait_procs(children, timeout = timeout, callback = on_terminate)
-
-        if alive:
-
-            for p in alive:
-                print("process {} survived SIGTERM; trying SIGKILL" % p)
-                p.kill()
-
-            gone, alive = psutil.wait_procs(alive, timeout = timeout, callback = on_terminate)
-
-            if alive:
-                # give up
-                for p in alive:
-                    print("process {} survived SIGKILL; kill it by hand" % p)
-
-
-
-
-
+import kill_proc_tree
 
 def process_for_fagg(input_queue, output_queue, func, args):
     for x in iter(input_queue.get, 'STOP'):
@@ -79,7 +44,7 @@ def fagg_parallelized(self, fagg, func, args, X, cpu = 2):
         input_queue.put('STOP')
 
     for process in processes:
-        kill_proc_tree(process.pid, include_parent = False, timeout = 0.5, on_terminate = None)
+        kill_proc_tree.kill_proc_tree(process.pid, include_parent = True, timeout = 0.5, on_terminate = None)
 
         if process.is_alive():
             process.terminate()
@@ -163,7 +128,7 @@ def reeval_parallelized(self, X, fit, func, ask, args= (), cpu = cpu_count()):
         input_queue.put('STOP')
 
     for process in processes:
-        kill_proc_tree(process.pid, include_parent = False, timeout = 0.5, on_terminate = None)
+        kill_proc_tree.kill_proc_tree(process.pid, include_parent = True, timeout = 0.5, on_terminate = None)
 
         if process.is_alive():
             process.terminate()
