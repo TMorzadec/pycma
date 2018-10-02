@@ -195,7 +195,7 @@ def ask_and_eval_parallelized(self, func, args, gradf = None, number = None, xme
                 input_queue.put('STOP')
 
         for process in processes:
-            kill_proc_tree.kill_proc_tree(process.pid, include_parent = True, timeout = 0.5, on_terminate = None)
+            kill_proc_tree.kill_proc_tree(process.pid, include_parent = False, timeout = 0.5, on_terminate = None)
 
             if process.is_alive():
                 process.terminate()
