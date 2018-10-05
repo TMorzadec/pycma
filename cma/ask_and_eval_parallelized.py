@@ -121,11 +121,12 @@ def ask_and_eval_parallelized(self, func, args, gradf = None, number = None, xme
 
         # do the work
         fit = []  # or np.NaN * np.empty(number)
-        X_first = self.ask(popsize, xmean = xmean, gradf = gradf, args = args)
-
+        
         if xmean is None:
             xmean = self.mean  # might have changed in self.ask
-
+        
+        X_first = self.ask(number = popsize, xmean = xmean, sigma_fac = sigma_fac, gradf = gradf, args = args)
+        
         X = []
         fit = []
 
@@ -175,9 +176,9 @@ def ask_and_eval_parallelized(self, func, args, gradf = None, number = None, xme
                 rejected += 1
                 
                 if (rejected + 1) % 1000 * popsize == 0:
-                    utils.print_warning('  %d solutions rejected (f-value NaN or None) at iteration %d' % (rejected, self.countiter))
+                    print("solutions rejected (f-value NaN or None) at iteration")
                 
-                new_x = self.ask(1, xmean, sigma_fac)[0]
+                new_x = self.ask(number = 1, xmean = xmean, sigma_fac = sigma_fac, gradf = gradf, args = args)[0]
                 
                 #if k + 1 >= popsize - nmirrors:  # selective mirrors
                     #if k + 1 == popsize - nmirrors:
@@ -188,6 +189,7 @@ def ask_and_eval_parallelized(self, func, args, gradf = None, number = None, xme
                 
             
             else:
+                
                 X.append(x)
                 fit.append(f)
 
@@ -205,10 +207,6 @@ def ask_and_eval_parallelized(self, func, args, gradf = None, number = None, xme
         if any(f is None or np.isnan(f) for f in fit):
             idxs = [i for i in range(len(fit))
                     if fit[i] is None or np.isnan(fit[i])]
-            utils.print_warning("f-values %s contain None or NaN at indices %s"
-                                % (str(fit[:30]) + ('...' if len(fit) > 30 else ''),
-                                   str(idxs)),
-                                'ask_and_tell',
-                                'CMAEvolutionStrategy',
-                                self.countiter)
+            print("f-values contain None or NaN at indices")
+        
         return X, fit

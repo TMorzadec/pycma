@@ -14,7 +14,7 @@ def process_for_fagg(input_queue, output_queue, func, args):
         output_queue.put(func(x, args))
 
 
-def fagg_parallelized(self, fagg, func, args, X, cpu = 2):
+def fagg_parallelized(self, fagg, func, args, X, cpu = 1):
     
     input_queue = Queue()
     output_queue = Queue()
@@ -22,7 +22,7 @@ def fagg_parallelized(self, fagg, func, args, X, cpu = 2):
     for x in X:
         input_queue.put(x.tolist())
 
-    nb_process = min(cpu, cpu_count(), len(self.idx))
+    nb_process = min(cpu, cpu_count(), len(X))
 
     processes = [Process(name = "Process" + str(i),\
                          target = process_for_fagg,
@@ -55,29 +55,23 @@ def fagg_parallelized(self, fagg, func, args, X, cpu = 2):
 
 
 
-def process_for_reeval(self, input_queue, output_queue, func, args, ask, fagg, evals):
+def process_for_reeval(self, input_queue, output_queue, func, args, ask, fagg, evals, nb_process_for_fagg):
     
-    
-
     for (i, x) in iter(input_queue.get, 'STOP'):
 
         if self.epsilon:
             if self.parallel:
-                fitre = fagg_parallelized(self, fagg, func, *args, X = ask(evals, x , self.epsilon))
+                fitre = fagg_parallelized(self, fagg, func, *args, X = ask(evals, x , self.epsilon), cpu = nb_process_for_fagg)
             else:
                 
                 Y = [ask(1, x, self.epsilon)[0] for _k in range(evals)]
                 
-                fitre = fagg_parallelized(self, fagg, func, *args, X = Y)
+                fitre = fagg_parallelized(self, fagg, func, *args, X = Y, cpu = nb_process_for_fagg)
                 
         else:
-            fitre = fagg_parallelized(self, fagg, func, *args, X = [x for _k in range(evals)])
+            fitre = fagg_parallelized(self, fagg, func, *args, X = [x for _k in range(evals)], cpu = nb_process_for_fagg)
 
         output_queue.put((fitre, i))
-
-
-
-
 
 
 def reeval_parallelized(self, X, fit, func, ask, args= (), cpu = cpu_count()):
@@ -109,9 +103,11 @@ def reeval_parallelized(self, X, fit, func, ask, args= (), cpu = cpu_count()):
 
     nb_process = min(cpu, cpu_count(), len(self.idx))
 
+    nb_process_for_fagg = max(1, int(cpu / nb_process))
+
     processes = [Process(name = "Process" + str(i),\
                          target = process_for_reeval,
-                         args = (self, input_queue, output_queue, func, args, ask, fagg, evals, )\
+                         args = (self, input_queue, output_queue, func, args, ask, fagg, evals, nb_process_for_fagg, )\
                          ) for i in range(nb_process)]
 
 
