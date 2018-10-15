@@ -5,13 +5,7 @@ import time
 from multiprocessing import cpu_count, Process, Queue
 import kill_proc_tree
                     
-k = 0              
-def get_k():
-    global k
-    x = k
-    k += 1
-    return x
-    
+
 def is_feasible(x, f):
     return not (x is None or f is None or np.isnan(f))
 
@@ -25,7 +19,7 @@ def process_for_ask_and_eval(self, input_queue, output_queue, func, args, length
         if is_feasible(x, f) and evaluations > 1:
             f = aggregation([f] + [(func(x, *args) if kappa == 1 else func(xmean + kappa * length_normalizer * (x - xmean), *args)) for _i in range(int(evaluations - 1))])
             
-        output_queue.put((np.asarray(x), f, get_k()))
+        output_queue.put((np.asarray(x), f))
 
 
 def ask_and_eval_parallelized(self, func, args, gradf = None, number = None, xmean = None, sigma_fac = 1,
@@ -118,15 +112,15 @@ def ask_and_eval_parallelized(self, func, args, gradf = None, number = None, xme
         assert nmirrors <= popsize // 2
         self.mirrors_idx = np.arange(nmirrors)  # might never be used
         is_feasible = self.opts['is_feasible']
-
+        print("NMIRRORS + " + str(nmirrors))
         # do the work
         fit = []  # or np.NaN * np.empty(number)
+                
+        X_first = self.ask(number = popsize, xmean = xmean, sigma_fac = sigma_fac, gradf = gradf, args = args)
         
         if xmean is None:
             xmean = self.mean  # might have changed in self.ask
-        
-        X_first = self.ask(number = popsize, xmean = xmean, sigma_fac = sigma_fac, gradf = gradf, args = args)
-        
+
         X = []
         fit = []
 
@@ -134,15 +128,15 @@ def ask_and_eval_parallelized(self, func, args, gradf = None, number = None, xme
         output_queue = Queue()
 
         
-        for x in X_first:
-            
-            #COMMENT : the mirror does NOT work with parallelization since it NEEDS FIT whic is NOT INSTANCIATED
+        for j in range(popsize - nmirrors):
+
+            x = X_first[j]
             
             input_queue.put(x.tolist())
 
-        nb_process = min(number_of_processes, cpu_count(), popsize)
-        
         length_normalizer = 1
+
+        nb_process = min(number_of_processes, cpu_count(), popsize - nmirrors)
 
         processes = [Process(name = "Process" + str(i),\
                          target = process_for_ask_and_eval,\
@@ -164,26 +158,18 @@ def ask_and_eval_parallelized(self, func, args, gradf = None, number = None, xme
 
         rejected = 0
 
+        while len(X) < popsize - nmirrors:
 
-
-        rejected = 0
-        while len(X) < popsize:
-
-            (x, f, k) = output_queue.get()
+            (x, f) = output_queue.get()
             
             if not is_feasible(x, f):
                 
                 rejected += 1
                 
-                if (rejected + 1) % 1000 * popsize == 0:
+                if (rejected + 1) % 1000 * (popsize - nmirrors) == 0:
                     print("solutions rejected (f-value NaN or None) at iteration")
                 
                 new_x = self.ask(number = 1, xmean = xmean, sigma_fac = sigma_fac, gradf = gradf, args = args)[0]
-                
-                #if k + 1 >= popsize - nmirrors:  # selective mirrors
-                    #if k + 1 == popsize - nmirrors:
-                        #self.mirrors_idx = np.argsort(fit)[-1:-1 - nmirrors:-1]
-                    #new_x = self.get_mirror(X[self.mirrors_idx[popsize - 1 - k]])
                 
                 input_queue.put(new_x.tolist())
                 
@@ -202,6 +188,74 @@ def ask_and_eval_parallelized(self, func, args, gradf = None, number = None, xme
             if process.is_alive():
                 process.terminate()
                 process.join()
+
+
+#        MIRRORING, need to be checked
+
+        self.mirrors_idx = np.argsort(fit)[-1:-1 - nmirrors:-1]
+
+        for j in range(popsize - nmirrors, popsize):
+
+            x = self.get_mirror(X[self.mirrors_idx[popsize - 1 - k]])
+
+            input_queue.put(x.tolist())
+
+
+        nb_process = min(number_of_processes, cpu_count(), nmirrors)
+
+        processes = [Process(name = "Process" + str(i),\
+                                 target = process_for_ask_and_eval,\
+                                 args = (self,
+                                         input_queue,\
+                                         output_queue,\
+                                         func,\
+                                         args,\
+                                         length_normalizer,\
+                                         xmean,\
+                                         sigma_fac,\
+                                         evaluations,\
+                                         aggregation,\
+                                         kappa,)\
+                                     ) for i in range(nb_process)]
+
+        for process in processes:
+            process.start()
+
+        rejected = 0
+
+        while len(X) < popsize:
+
+        (x, f) = output_queue.get()
+
+        if not is_feasible(x, f):
+            rejected += 1
+
+            if (rejected + 1) % 1000 * nmirrors == 0:
+                print("solutions rejected (f-value NaN or None) at iteration")
+
+                new_x = self.ask(number = 1, xmean = xmean, sigma_fac = sigma_fac, gradf = gradf, args = args)[0]
+
+                input_queue.put(new_x.tolist())
+
+
+            else:
+                X.append(x)
+                fit.append(f)
+
+            for process in processes:
+                input_queue.put('STOP')
+
+            for process in processes:
+                kill_proc_tree.kill_proc_tree(process.pid, include_parent = False, timeout = 0.5, on_terminate = None)
+
+            if process.is_alive():
+                process.terminate()
+                process.join()
+
+
+
+
+
 
         self.evaluations_per_f_value = int(evaluations)
         if any(f is None or np.isnan(f) for f in fit):
