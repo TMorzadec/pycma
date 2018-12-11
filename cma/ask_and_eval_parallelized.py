@@ -4,6 +4,7 @@ import psutil
 import time
 from multiprocessing import cpu_count, Process, Queue
 import kill_proc_tree
+from .utilities.math import Mh
                     
 
 def is_feasible(x, f):
@@ -104,6 +105,7 @@ def ask_and_eval_parallelized(self, func, args, gradf = None, number = None, xme
 
         if self.opts['CMA_mirrormethod'] == 1:  # direct selective mirrors
             nmirrors = Mh.sround(self.sp.lam_mirr * popsize / self.sp.popsize)
+            print("NMIRRORS = " + str(nmirrors))
             self._mirrormethod1_done = self.countiter
         else:
             # method==0 unconditional mirrors are done in ask_geno
@@ -112,7 +114,7 @@ def ask_and_eval_parallelized(self, func, args, gradf = None, number = None, xme
         assert nmirrors <= popsize // 2
         self.mirrors_idx = np.arange(nmirrors)  # might never be used
         is_feasible = self.opts['is_feasible']
-        print("NMIRRORS + " + str(nmirrors))
+        print("NMIRRORS = " + str(nmirrors))
         # do the work
         fit = []  # or np.NaN * np.empty(number)
                 
@@ -196,7 +198,7 @@ def ask_and_eval_parallelized(self, func, args, gradf = None, number = None, xme
 
         for j in range(popsize - nmirrors, popsize):
 
-            x = self.get_mirror(X[self.mirrors_idx[popsize - 1 - k]])
+            x = self.get_mirror(X[self.mirrors_idx[popsize - 1 - j]])
 
             input_queue.put(x.tolist())
 
@@ -224,14 +226,15 @@ def ask_and_eval_parallelized(self, func, args, gradf = None, number = None, xme
         rejected = 0
 
         while len(X) < popsize:
+            
+            (x, f) = output_queue.get()
 
-        (x, f) = output_queue.get()
-
-        if not is_feasible(x, f):
-            rejected += 1
-
-            if (rejected + 1) % 1000 * nmirrors == 0:
-                print("solutions rejected (f-value NaN or None) at iteration")
+            if not is_feasible(x, f):
+                
+                rejected += 1
+                
+                if (rejected + 1) % 1000 * nmirrors == 0:
+                    print("solutions rejected (f-value NaN or None) at iteration")
 
                 new_x = self.ask(number = 1, xmean = xmean, sigma_fac = sigma_fac, gradf = gradf, args = args)[0]
 
@@ -242,12 +245,12 @@ def ask_and_eval_parallelized(self, func, args, gradf = None, number = None, xme
                 X.append(x)
                 fit.append(f)
 
-            for process in processes:
-                input_queue.put('STOP')
+        for process in processes:
+            input_queue.put('STOP')
 
-            for process in processes:
-                kill_proc_tree.kill_proc_tree(process.pid, include_parent = False, timeout = 0.5, on_terminate = None)
-
+        for process in processes:
+            kill_proc_tree.kill_proc_tree(process.pid, include_parent = False, timeout = 0.5, on_terminate = None)
+            
             if process.is_alive():
                 process.terminate()
                 process.join()

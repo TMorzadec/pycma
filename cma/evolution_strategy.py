@@ -2106,7 +2106,7 @@ class CMAEvolutionStrategy(interfaces.OOOptimizer):
     #
     
     
-    def ask_and_eval(self, func, args=(), gradf=None, number=None, xmean = None, sigma_fac=1,
+    def ask_and_eval(self, func, args=(), gradf=None, number=None, xmean=None, sigma_fac=1,
                      evaluations=1, aggregation=np.median, kappa=1):
         
         try:
